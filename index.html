@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel Folder Merger</title>
+    <!-- xlsx-js-style library for reading/writing Excel files with cell styling support -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ink: #17243a;
+            --canvas: #edf0f4;
+            --surface: #ffffff;
+            --line: #d9dfe7;
+            --line-soft: #e8ecf1;
+            --text: #1b2535;
+            --muted: #5f6b7c;
+            --accent: #0b6e8a;
+            --accent-strong: #085873;
+            --accent-tint: #e3f1f5;
+            --ok: #1b7f4b;
+            --warn: #a15c07;
+            --danger: #b42318;
+            --danger-tint: #fdeceb;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--canvas);
+            color: var(--text);
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            font-size: 15px;
+            line-height: 1.5;
+        }
+
+        /* ---------- Top bar ---------- */
+        .topbar {
+            background: var(--ink);
+            color: #fff;
+        }
+        .topbar-inner {
+            max-width: 100%;
+            margin: 0 auto;
+            padding: 0.9rem 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.9rem;
+        }
+        .brand-mark {
+            width: 2.25rem;
+            height: 2.25rem;
+            border-radius: 8px;
+            background: var(--accent);
+            display: grid;
+            place-items: center;
+            flex-shrink: 0;
+        }
+        .brand-mark svg { width: 1.3rem; height: 1.3rem; }
+        .topbar h1 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin: 0;
+            line-height: 1.2;
+        }
+        .topbar p {
+            margin: 0;
+            font-size: 0.8rem;
+            color: #aab6c8;
+        }
+
+        /* ---------- Page layout ---------- */
+        .page {
+            flex: 1;
+            width: 100%;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            padding: 1.5rem 2rem;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: 1.6fr 1fr 1fr 1fr;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            margin-bottom: 1.25rem;
+        }
+        .stat {
+            padding: 1rem 1.25rem;
+            border-right: 1px solid var(--line-soft);
+            min-width: 0;
+        }
+        .stat:last-child { border-right: none; }
+        .stat-label {
+            font-size: 0.8rem;
+            color: var(--muted);
+        }
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            line-height: 1.3;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .stat-value.ok { color: var(--ok); }
+        .stat-value.bad { color: var(--danger); }
+
+        .layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+            gap: 1.25rem;
+            align-items: stretch;
+            flex: 1;
+            min-height: 0;
+        }
+        .col { display: flex; flex-direction: column; gap: 1.25rem; min-width: 0; min-height: 0; }
+
+        .panel {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+        .panel.grow { flex: 1; }
+        .panel.grow-2 { flex: 2; }
+        .panel-head {
+            padding: 0.85rem 1.25rem;
+            border-bottom: 1px solid var(--line-soft);
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+        .panel-head h2 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin: 0;
+        }
+        .panel-head .hint {
+            font-size: 0.8rem;
+            color: var(--muted);
+        }
+        .panel-body { padding: 1.25rem; }
+        .panel-body.fill { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+
+        /* ---------- Source panel ---------- */
+        input.path-input {
+            width: 100%;
+            padding: 0.65rem 0.85rem;
+            margin-bottom: 0.75rem;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            font: inherit;
+            font-size: 0.9rem;
+            color: var(--text);
+            background: #fafbfc;
+        }
+        input.path-input::placeholder { color: #8b96a6; }
+        input.path-input:focus-visible,
+        button:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+
+        button { font: inherit; }
+
+        button.folder-btn {
+            width: 100%;
+            background: var(--accent);
+            color: #fff;
+            font-weight: 500;
+            padding: 0.7rem 1rem;
+            border-radius: 8px;
+            border: 1px solid var(--accent-strong);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            transition: background-color 0.15s;
+        }
+        button.folder-btn:hover { background: var(--accent-strong); }
+        button.folder-btn svg { width: 1.15rem; height: 1.15rem; }
+
+        .path-display {
+            font-size: 0.82rem;
+            color: var(--muted);
+            margin: 0.75rem 0 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* ---------- Folder tiles ---------- */
+        .subfolder-container.hidden,
+        .file-list-container.hidden { display: none; }
+        .file-list-container { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+        .subfolder-container .file-list-header {
+            margin: 0 0 0.75rem;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--muted);
+        }
+        .subfolder-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
+            gap: 0.6rem;
+        }
+        button.subfolder-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            text-align: left;
+            background: var(--surface);
+            color: var(--text);
+            font-weight: 500;
+            font-size: 0.9rem;
+            padding: 0.75rem 0.9rem;
+            border-radius: 8px;
+            border: 1px solid var(--line);
+            cursor: pointer;
+            transition: border-color 0.15s, background-color 0.15s;
+            min-width: 0;
+            overflow-wrap: anywhere;
+        }
+        button.subfolder-btn::before {
+            content: "";
+            width: 1.1rem;
+            height: 1.1rem;
+            flex-shrink: 0;
+            background: no-repeat center / contain url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' stroke='%230b6e8a' stroke-width='2' viewBox='0 0 24 24'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z'/%3E%3C/svg%3E");
+        }
+        button.subfolder-btn:hover:not(:disabled) {
+            border-color: var(--accent);
+            background: var(--accent-tint);
+        }
+        button.subfolder-btn.active {
+            background: var(--accent);
+            border-color: var(--accent-strong);
+            color: #fff;
+        }
+        button.subfolder-btn.active::before {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' stroke='%23ffffff' stroke-width='2' viewBox='0 0 24 24'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z'/%3E%3C/svg%3E");
+        }
+        button.subfolder-btn:disabled { cursor: wait; opacity: 0.7; }
+        button.subfolder-btn.unavailable,
+        button.subfolder-btn.unavailable:hover {
+            background: #f5f6f8;
+            border: 1px dashed #c3cad5;
+            color: #8b96a6;
+            text-decoration: line-through;
+            cursor: not-allowed;
+            opacity: 1;
+        }
+        button.subfolder-btn.unavailable::before { opacity: 0.4; filter: grayscale(1); }
+
+        .folder-legend {
+            font-size: 0.8rem;
+            color: var(--muted);
+            margin: 0.85rem 0 0;
+        }
+
+        /* ---------- Files list ---------- */
+        .file-list-header {
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--muted);
+            margin: 0;
+            padding: 0.75rem 1.25rem;
+            background: #f7f9fb;
+            border-bottom: 1px solid var(--line-soft);
+        }
+        ul.file-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            font-size: 0.9rem;
+        }
+        ul.file-list li {
+            display: flex;
+            gap: 0.9rem;
+            padding: 0.5rem 1.25rem;
+            border-bottom: 1px solid var(--line-soft);
+        }
+        ul.file-list li:last-child { border-bottom: none; }
+        ul.file-list li:hover { background: #f7f9fb; }
+        ul.file-list .idx {
+            width: 2rem;
+            text-align: right;
+            color: var(--muted);
+            font-variant-numeric: tabular-nums;
+            flex-shrink: 0;
+        }
+        ul.file-list .fname {
+            min-width: 0;
+            overflow-wrap: anywhere;
+        }
+
+        .empty-state {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem 1.25rem;
+            text-align: center;
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+        .subfolder-container:not(.hidden) + .empty-state,
+        .file-list-container:not(.hidden) + .empty-state { display: none; }
+
+        /* ---------- Result panel ---------- */
+        .status-msg {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            margin: 0;
+            padding: 1.25rem;
+            font-size: 0.9rem;
+            line-height: 1.65;
+            color: var(--text);
+        }
+        .status-msg:empty::before {
+            content: "Merge progress, warnings and missing numbers will appear here.";
+            color: var(--muted);
+        }
+        .highlight-missing {
+            display: block;
+            margin-top: 0.6rem;
+            padding: 0.6rem 0.8rem;
+            background: var(--danger-tint);
+            border-left: 3px solid var(--danger);
+            border-radius: 4px;
+            color: var(--danger);
+            font-weight: 600;
+            overflow-wrap: anywhere;
+        }
+
+        @media (min-width: 901px) {
+            body { height: 100vh; overflow: hidden; }
+        }
+
+        /* ---------- Responsive ---------- */
+        @media (max-width: 900px) {
+            .layout { grid-template-columns: 1fr; }
+            .col { display: grid; }
+            ul.file-list { max-height: 22rem; }
+            .stats { grid-template-columns: 1fr 1fr; }
+            .stat:nth-child(2) { border-right: none; }
+            .stat:nth-child(-n+2) { border-bottom: 1px solid var(--line-soft); }
+        }
+        @media (max-width: 520px) {
+            .page { padding: 1rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <header class="topbar">
+        <div class="topbar-inner">
+            <div class="brand-mark">
+                <svg fill="none" stroke="#fff" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h10"></path>
+                </svg>
+            </div>
+            <div>
+                <h1>Excel Folder Merger</h1>
+                <p>Merge numbered Excel batches, one folder at a time</p>
+            </div>
+        </div>
+    </header>
+
+    <main class="page">
+
+        <section class="stats" aria-label="Summary">
+            <div class="stat">
+                <div class="stat-label">Main folder</div>
+                <div class="stat-value" id="statMain">-</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Folders available</div>
+                <div class="stat-value ok" id="statAvail">0</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Folders unavailable</div>
+                <div class="stat-value bad" id="statUnavail">0</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Files in sequence</div>
+                <div class="stat-value" id="statFiles">0</div>
+            </div>
+        </section>
+
+        <div class="layout">
+
+            <!-- Left column: source + folders -->
+            <div class="col">
+                <section class="panel">
+                    <div class="panel-head">
+                        <h2>Source</h2>
+                        <span class="hint">Pick the main output folder</span>
+                    </div>
+                    <div class="panel-body">
+                        <input id="pathInput" class="path-input" type="text" placeholder="Paste server path, e.g. //192.16.18.225/File Paths/11102026 (optional)" spellcheck="false">
+                        <button onclick="selectFolderPath()" class="folder-btn">
+                            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+                            </svg>
+                            Select Main Folder Path
+                        </button>
+                        <input type="file" id="fallbackFolderInput" webkitdirectory multiple style="display:none;">
+                        <p id="selectedPathDisplay" class="path-display">No folder selected yet</p>
+                    </div>
+                </section>
+
+                <section class="panel grow">
+                    <div class="panel-head">
+                        <h2>Folders</h2>
+                        <span class="hint">Click an available folder to merge it</span>
+                    </div>
+                    <div class="panel-body fill">
+                        <div id="subfolderContainer" class="subfolder-container hidden">
+                            <h3 id="subfolderHeader" class="file-list-header">Available Folders:</h3>
+                            <div id="subfolderGrid" class="subfolder-grid"></div>
+                        </div>
+                        <div class="empty-state">Select the main folder to see its sub folders here.</div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Right column: files + result -->
+            <div class="col">
+                <section class="panel grow grow-2">
+                    <div class="panel-head">
+                        <h2>Files</h2>
+                        <span class="hint">Sorted by the number in each file name</span>
+                    </div>
+                    <div id="fileListContainer" class="file-list-container hidden">
+                        <h3 id="fileCountHeader" class="file-list-header">Detected Sequence Order:</h3>
+                        <ul id="fileList" class="file-list"></ul>
+                    </div>
+                    <div class="empty-state">Files from the selected folder will be listed here.</div>
+                </section>
+
+                <section class="panel grow">
+                    <div class="panel-head">
+                        <h2>Result</h2>
+                    </div>
+                    <!-- Kept for the merge logic; merging starts when a folder is clicked -->
+                    <button id="mergeBtn" onclick="mergeFiles()" disabled class="primary-btn" style="display:none;">Merge & Download Output</button>
+                    <p id="statusMsg" class="status-msg" aria-live="polite"></p>
+                </section>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        let selectedFiles = [];
+        let folderName = "Merged_Output"; // Default fallback name
+        let mainFolderName = "";
+
+        // Pressing Enter in the path box does the same as clicking "Select Main Folder Path"
+        document.getElementById('pathInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                selectFolderPath();
+            }
+        });
+
+        function setStat(id, value) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value;
+        }
+
+        // Browsers cannot open a typed path directly, so the pasted server path is
+        // converted to Windows format and copied; paste it into the folder window's address bar.
+        async function preparePastedPath() {
+            const raw = document.getElementById('pathInput').value.trim();
+            if (!raw) return;
+            const winPath = raw.replace(/\//g, '\\').replace(/^\\(?!\\)/, '\\\\');
+            document.getElementById('pathInput').value = winPath;
+            try {
+                await navigator.clipboard.writeText(winPath);
+                document.getElementById('statusMsg').textContent =
+                    "Path copied. In the folder window, click the address bar, press Ctrl+V, press Enter, then click Select Folder.";
+            } catch (e) {
+                document.getElementById('statusMsg').textContent =
+                    "In the folder window, paste the path from the box above into the address bar.";
+            }
+        }
+
+        async function selectFolderPath() {
+            try {
+                await preparePastedPath();
+                if (!window.showDirectoryPicker) {
+                    // Fallback for browsers / contexts without the File System Access API
+                    const input = document.getElementById('fallbackFolderInput');
+                    input.value = '';
+                    input.click();
+                    return;
+                }
+
+                const dirHandle = await window.showDirectoryPicker();
+                mainFolderName = dirHandle.name;
+                document.getElementById('selectedPathDisplay').textContent = `Main Folder: /${mainFolderName}`;
+
+                // Reset previous selection
+                selectedFiles = [];
+                document.getElementById('fileListContainer').classList.add('hidden');
+                document.getElementById('mergeBtn').disabled = true;
+
+                // Collect the sub folders inside the main folder
+                const subFolders = [];
+                for await (const entry of dirHandle.values()) {
+                    if (entry.kind === 'directory') {
+                        subFolders.push(entry);
+                    }
+                }
+                subFolders.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+
+                showSubFolderButtons(subFolders);
+
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    console.error(err);
+                    alert("Error reading folder path.");
+                }
+            }
+        }
+
+        // Fallback: read the main folder through a normal folder <input>
+        document.getElementById('fallbackFolderInput').addEventListener('change', (e) => {
+            const all = Array.from(e.target.files);
+            if (all.length === 0) return;
+
+            mainFolderName = all[0].webkitRelativePath.split('/')[0];
+            document.getElementById('selectedPathDisplay').textContent = `Main Folder: /${mainFolderName}`;
+
+            selectedFiles = [];
+            document.getElementById('fileListContainer').classList.add('hidden');
+            document.getElementById('mergeBtn').disabled = true;
+
+            // Group files by first-level sub folder: main/sub/.../file.xlsx
+            const groups = new Map();
+            all.forEach(file => {
+                const parts = file.webkitRelativePath.split('/');
+                if (parts.length >= 3) {
+                    const sub = parts[1];
+                    if (!groups.has(sub)) groups.set(sub, []);
+                    groups.get(sub).push(file);
+                }
+            });
+
+            const subFolders = Array.from(groups, ([name, files]) => ({ name, fallbackFiles: files }));
+            subFolders.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+            showSubFolderButtons(subFolders);
+        });
+
+        // Folders you expect inside the main folder. Edit this list to match your setup.
+        const EXPECTED_FOLDERS = ["ATFL", "FCCA", "JROTC", "STEM - 001", "STEM - 002"];
+
+        function showSubFolderButtons(subFolders) {
+            const container = document.getElementById('subfolderContainer');
+            const grid = document.getElementById('subfolderGrid');
+            const header = document.getElementById('subfolderHeader');
+            const statusMsg = document.getElementById('statusMsg');
+
+            grid.innerHTML = '';
+
+            const foundByName = new Map(subFolders.map(h => [h.name.trim().toLowerCase(), h]));
+            const expectedKeys = new Set(EXPECTED_FOLDERS.map(n => n.trim().toLowerCase()));
+
+            let availableCount = 0;
+            let unavailableCount = 0;
+
+            const addAvailable = (handle) => {
+                const btn = document.createElement('button');
+                btn.className = 'subfolder-btn';
+                btn.textContent = handle.name; // textContent keeps folder names safe
+                btn.onclick = () => selectSubFolder(handle, btn);
+                grid.appendChild(btn);
+                availableCount++;
+            };
+
+            // 1) Expected folders: available if found, otherwise shown as unavailable
+            EXPECTED_FOLDERS.forEach(name => {
+                const handle = foundByName.get(name.trim().toLowerCase());
+                if (handle) {
+                    addAvailable(handle);
+                } else {
+                    const btn = document.createElement('button');
+                    btn.className = 'subfolder-btn unavailable';
+                    btn.textContent = name;
+                    btn.disabled = true;
+                    btn.title = 'Folder not found in the selected main folder';
+                    grid.appendChild(btn);
+                    unavailableCount++;
+                }
+            });
+
+            // 2) Any other folders found that are not in the expected list
+            subFolders.forEach(handle => {
+                if (!expectedKeys.has(handle.name.trim().toLowerCase())) addAvailable(handle);
+            });
+
+            header.textContent = `Folders: ${availableCount} available, ${unavailableCount} unavailable`;
+
+            let legend = document.getElementById('folderLegend');
+            if (!legend) {
+                legend = document.createElement('p');
+                legend.id = 'folderLegend';
+                legend.className = 'folder-legend';
+                container.appendChild(legend);
+            }
+            legend.textContent = unavailableCount > 0
+                ? "Crossed-out folders were not found in the selected main folder."
+                : "All expected folders were found.";
+
+            setStat('statMain', mainFolderName || '-');
+            setStat('statAvail', availableCount);
+            setStat('statUnavail', unavailableCount);
+            setStat('statFiles', 0);
+
+            container.classList.remove('hidden');
+            statusMsg.textContent = availableCount > 0
+                ? "Click an available folder button to start merging."
+                : "None of the expected folders were found in the selected main folder.";
+        }
+
+        async function selectSubFolder(handle, btn) {
+            try {
+                document.querySelectorAll('.subfolder-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                folderName = handle.name; // Output file will use the chosen sub folder name
+                document.getElementById('statusMsg').textContent = `Reading ${handle.name}...`;
+
+                let files = [];
+                if (handle.fallbackFiles) {
+                    files = handle.fallbackFiles.filter(f =>
+                        (f.name.endsWith('.xlsx') || f.name.endsWith('.xls')) && !f.name.startsWith('~$'));
+                } else {
+                    await scanDirectory(handle, files);
+                }
+
+                handleFiles(files);
+
+                // Start merging automatically using the original merge logic
+                if (selectedFiles.length > 0) {
+                    document.querySelectorAll('.subfolder-btn').forEach(b => b.disabled = true);
+                    try {
+                        await mergeFiles();
+                    } finally {
+                        document.querySelectorAll('.subfolder-btn').forEach(b => b.disabled = false);
+                    }
+                }
+
+            } catch (err) {
+                console.error(err);
+                alert("Error reading sub folder.");
+            }
+        }
+
+        async function scanDirectory(dirHandle, fileList) {
+            for await (const entry of dirHandle.values()) {
+                if (entry.kind === 'file') {
+                    const file = await entry.getFile();
+                    if ((file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) && !file.name.startsWith('~$')) {
+                        fileList.push(file);
+                    }
+                } else if (entry.kind === 'directory') {
+                    await scanDirectory(entry, fileList);
+                }
+            }
+        }
+
+        function handleFiles(files) {
+            selectedFiles = files;
+            const listContainer = document.getElementById('fileListContainer');
+            const fileListUI = document.getElementById('fileList');
+            const mergeBtn = document.getElementById('mergeBtn');
+            const fileCountHeader = document.getElementById('fileCountHeader');
+            
+            fileListUI.innerHTML = '';
+            setStat('statFiles', selectedFiles.length);
+
+            if (selectedFiles.length > 0) {
+                selectedFiles.sort((a, b) => extractSequenceNumber(a.name) - extractSequenceNumber(b.name));
+                fileCountHeader.textContent = `Detected Sequence Order (${selectedFiles.length} files):`;
+
+                selectedFiles.forEach((file, index) => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `<span class="idx">${index + 1}</span><span class="fname">${file.name}</span>`;
+                    fileListUI.appendChild(li);
+                });
+
+                listContainer.classList.remove('hidden');
+                mergeBtn.disabled = false;
+                document.getElementById('statusMsg').textContent = `${selectedFiles.length} files sorted by filename numbers successfully.`;
+            } else {
+                listContainer.classList.add('hidden');
+                mergeBtn.disabled = true;
+                document.getElementById('statusMsg').textContent = "No valid Excel files found in the selected folder.";
+            }
+        }
+
+        function extractSequenceNumber(filename) {
+            const match = filename.match(/\((\d+)-/);
+            return match ? parseInt(match[1], 10) : 0;
+        }
+
+        function extractFileRange(filename) {
+            const match = filename.match(/\((\d+)-(\d+)\)/);
+            if (match) {
+                return {
+                    start: parseInt(match[1], 10),
+                    end: parseInt(match[2], 10)
+                };
+            }
+            const singleMatch = filename.match(/\((\d+)/);
+            const num = singleMatch ? parseInt(singleMatch[1], 10) : 0;
+            return { start: num, end: num };
+        }
+
+        async function mergeFiles() {
+            const statusMsg = document.getElementById('statusMsg');
+            statusMsg.textContent = "Processing files...";
+            
+            let combinedData = [];
+            let cyanRowIndices = []; // Stores the row indices where Column C value changes
+
+            try {
+                for (let i = 0; i < selectedFiles.length; i++) {
+                    const file = selectedFiles[i];
+                    statusMsg.textContent = `Processing file ${i + 1} of ${selectedFiles.length}: ${file.name}`;
+                    
+                    const data = await file.arrayBuffer();
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    let rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                    if (rows.length > 0) {
+                        let cleanedRows = rows.filter(row => row && row.some(cell => cell !== undefined && cell !== ""));
+
+                        if (cleanedRows.length > 0) {
+                            if (i === 0) {
+                                combinedData = cleanedRows;
+                            } else {
+                                const dataRows = cleanedRows.slice(1);
+                                
+                                // Check if the Column C (index 2) value changes between the last element of combinedData and the first element of dataRows
+                                if (combinedData.length > 0 && dataRows.length > 0) {
+                                    const lastValC = combinedData[combinedData.length - 1][2];
+                                    const firstValC = dataRows[0][2];
+                                    
+                                    if (lastValC !== undefined && firstValC !== undefined && lastValC !== firstValC) {
+                                        cyanRowIndices.push(combinedData.length);
+                                        combinedData.push([]); // Insert empty spacer row
+                                    }
+                                }
+
+                                combinedData = combinedData.concat(dataRows);
+                            }
+                        }
+                    }
+                }
+
+                statusMsg.textContent = "Checking sequences...";
+
+                // 1. Check File Name Ranges for Gaps
+                let missingFileNumbers = [];
+                for (let i = 0; i < selectedFiles.length - 1; i++) {
+                    const currRange = extractFileRange(selectedFiles[i].name);
+                    const nextRange = extractFileRange(selectedFiles[i+1].name);
+
+                    if (nextRange.start > currRange.end + 1) {
+                        for (let n = currRange.end + 1; n < nextRange.start; n++) {
+                            missingFileNumbers.push(n);
+                        }
+                    }
+                }
+                
+                // 2. Check Column D (index 3) for missing sequence numbers
+                let columnDNumbers = [];
+                for (let r = 1; r < combinedData.length; r++) {
+                    const row = combinedData[r];
+                    if (row && row.length > 3) {
+                        const val = row[3];
+                        if (val !== undefined && val !== "" && !isNaN(val)) {
+                            columnDNumbers.push(Number(val));
+                        }
+                    }
+                }
+
+                let missingColumnNumbers = [];
+                if (columnDNumbers.length > 0) {
+                    const minVal = Math.min(...columnDNumbers);
+                    const maxVal = Math.max(...columnDNumbers);
+                    const numSet = new Set(columnDNumbers);
+
+                    for (let n = minVal; n <= maxVal; n++) {
+                        if (!numSet.has(n)) {
+                            missingColumnNumbers.push(n);
+                        }
+                    }
+                }
+
+                statusMsg.textContent = "Generating final merged file...";
+                const newWorksheet = XLSX.utils.aoa_to_sheet(combinedData);
+
+                // Apply cyan background fill style to each cell of the inserted empty rows using xlsx-js-style
+                const range = XLSX.utils.decode_range(newWorksheet['!ref'] || "A1");
+                for (let r of cyanRowIndices) {
+                    for (let c = range.s.c; c <= range.e.c; c++) {
+                        const cellAddress = XLSX.utils.encode_cell({ r: r, c: c });
+                        if (!newWorksheet[cellAddress]) {
+                            newWorksheet[cellAddress] = { t: 's', v: '' };
+                        }
+                        newWorksheet[cellAddress].s = {
+                            fill: {
+                                fgColor: { rgb: "00FFFF" } // Cyan fill color
+                            }
+                        };
+                    }
+                }
+
+                const newWorkbook = XLSX.utils.book_new();
+                // Sheet name set explicitly to "Sheet1"
+                XLSX.utils.book_append_sheet(newWorkbook, newWorksheet, "Sheet1");
+
+                // File name = selected folder name, e.g. ATFL.xlsx
+                const outputFileName = `${folderName}.xlsx`;
+                XLSX.writeFile(newWorkbook, outputFileName);
+                
+                let successHTML = `Successfully merged all ${selectedFiles.length} files & downloaded! 🎉`;
+                
+                if (missingFileNumbers.length > 0) {
+                    successHTML += `<br>⚠️ Missing in File Names: ${missingFileNumbers.join(', ')}`;
+                }
+                if (missingColumnNumbers.length > 0) {
+                    successHTML += `<br><span class="highlight-missing">⚠️ Missing in Column D (Missing Forms): ${missingColumnNumbers.join(', ')}</span>`;
+                }
+
+                statusMsg.innerHTML = successHTML;
+
+            } catch (error) {
+                console.error(error);
+                statusMsg.textContent = "An error occurred while merging. Check browser console.";
+            }
+        }
+    </script>
+</body>
+</html>
